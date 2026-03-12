@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 
 interface Product {
@@ -13,21 +13,32 @@ interface Product {
 }
 
 const CATEGORIES = [
-    { id: 'cat-oil', name: 'Oils & Ghee' },
-    { id: 'cat-grains', name: 'Grains, Atta & Rice' },
-    { id: 'cat-chips', name: 'Chips & Namkeen' },
-    { id: 'cat-biscuits', name: 'Biscuits & Cookies' },
-    { id: 'cat-soap', name: 'Bath & Body' },
+    { id: 'all', name: 'All Products', icon: '🏪' },
+    { id: 'cat-oil', name: 'Oils & Ghee', icon: '🛢️' },
+    { id: 'cat-grains', name: 'Grains, Atta & Rice', icon: '🌾' },
+    { id: 'cat-chips', name: 'Chips & Namkeen', icon: '🥔' },
+    { id: 'cat-biscuits', name: 'Biscuits & Cookies', icon: '🍪' },
+    { id: 'cat-soap', name: 'Bath & Body', icon: '🧼' },
+];
+
+const ADMIN_NAV = [
+    { id: 'overview', label: 'Overview', icon: '📊' },
+    { id: 'products', label: 'Products', icon: '📦' },
+    { id: 'orders', label: 'Orders', icon: '🚚' },
 ];
 
 export default function AdminDashboard() {
     const navigate = useNavigate();
+    const sliderRef = useRef<HTMLDivElement>(null);
+
     const [products, setProducts] = useState<Product[]>([]);
     const [orders, setOrders] = useState<any[]>([]);
     const [isFormOpen, setIsFormOpen] = useState(false);
     const [isLoading, setIsLoading] = useState(false);
-    const [showTable, setShowTable] = useState(false);
-    const [showOrdersTable, setShowOrdersTable] = useState(false);
+    const [activeNav, setActiveNav] = useState<'overview' | 'products' | 'orders'>('overview');
+    const [activeCategory, setActiveCategory] = useState('all');
+    const [searchQuery, setSearchQuery] = useState('');
+    const [isSidebarOpen, setIsSidebarOpen] = useState(() => window.innerWidth >= 1024);
 
     // Form State
     const [editingId, setEditingId] = useState<string | null>(null);
@@ -38,19 +49,38 @@ export default function AdminDashboard() {
         delivery: '10 MINS',
         image: '',
         unit: '',
-        categoryId: CATEGORIES[0].id
+        categoryId: CATEGORIES[1].id
     });
 
     useEffect(() => {
+        // --- Security Check: Restrict to Admin Email ---
+        const savedUserStr = localStorage.getItem('user');
+        if (!savedUserStr) {
+            navigate('/login');
+            return;
+        }
+
+        try {
+            const savedUser = JSON.parse(savedUserStr);
+            if (savedUser.email !== 'admin@bmart.com') {
+                navigate('/dashboard');
+                return;
+            }
+        } catch (e) {
+            console.error('Failed to parse user session');
+            navigate('/login');
+            return;
+        }
+
+        // --- Fetch initial data if authorized ---
         fetchProducts();
         fetchOrders();
-    }, []);
+    }, [navigate]);
 
     const fetchOrders = async () => {
         try {
             const res = await fetch('http://localhost:5000/api/orders');
             const data = await res.json();
-            // Sort to show highest pending first
             const sortedData = data.sort((a: any, b: any) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
             setOrders(sortedData);
         } catch (error) {
@@ -65,14 +95,9 @@ export default function AdminDashboard() {
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ status: newStatus })
             });
-            if (res.ok) {
-                // Refresh both orders and products data just in case
-                fetchOrders();
-            } else {
-                console.error("Failed to update status");
-            }
+            if (res.ok) fetchOrders();
         } catch (error) {
-            console.error("Error updating status:", error);
+            console.error('Error updating status:', error);
         }
     };
 
@@ -103,341 +128,526 @@ export default function AdminDashboard() {
             });
         } else {
             setEditingId(null);
-            setFormData({
-                name: '',
-                price: '',
-                originalPrice: '',
-                delivery: '10 MINS',
-                image: '',
-                unit: '',
-                categoryId: CATEGORIES[0].id
-            });
+            setFormData({ name: '', price: '', originalPrice: '', delivery: '10 MINS', image: '', unit: '', categoryId: CATEGORIES[1].id });
         }
         setIsFormOpen(true);
     };
 
-    const handleCloseForm = () => {
-        setIsFormOpen(false);
-        setEditingId(null);
-    };
+    const handleCloseForm = () => { setIsFormOpen(false); setEditingId(null); };
 
     const handleSave = async (e: React.FormEvent) => {
         e.preventDefault();
-
         const payload = {
             ...formData,
             price: Number(formData.price),
             originalPrice: formData.originalPrice ? Number(formData.originalPrice) : undefined
         };
-
         try {
-            const url = editingId
-                ? `http://localhost:5000/api/products/${editingId}`
-                : 'http://localhost:5000/api/products';
+            const url = editingId ? `http://localhost:5000/api/products/${editingId}` : 'http://localhost:5000/api/products';
             const method = editingId ? 'PUT' : 'POST';
-
-            const res = await fetch(url, {
-                method,
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(payload)
-            });
-
-            if (res.ok) {
-                fetchProducts();
-                handleCloseForm();
-            } else {
-                console.error('Failed to save product');
-            }
+            const res = await fetch(url, { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+            if (res.ok) { fetchProducts(); handleCloseForm(); }
         } catch (error) {
             console.error('Error saving product:', error);
         }
     };
 
     const handleDelete = async (id: string) => {
-        if (!window.confirm('Are you sure you want to delete this product?')) return;
-
+        if (!window.confirm('Delete this product?')) return;
         try {
-            const res = await fetch(`http://localhost:5000/api/products/${id}`, {
-                method: 'DELETE'
-            });
-
-            if (res.ok) {
-                fetchProducts();
-            } else {
-                console.error('Failed to delete product');
-            }
+            const res = await fetch(`http://localhost:5000/api/products/${id}`, { method: 'DELETE' });
+            if (res.ok) fetchProducts();
         } catch (error) {
             console.error('Error deleting product:', error);
         }
     };
 
-    const getCategoryName = (id: string) => {
-        const cat = CATEGORIES.find(c => c.id === id);
-        return cat ? cat.name : id;
+    const getCategoryName = (id: string) => CATEGORIES.find(c => c.id === id)?.name || id;
+    const getCategoryIcon = (id: string) => CATEGORIES.find(c => c.id === id)?.icon || '📦';
+
+    // Filtered products
+    const filteredProducts = products.filter(p => {
+        const matchesCat = activeCategory === 'all' || p.categoryId === activeCategory;
+        const matchesSearch = p.name.toLowerCase().includes(searchQuery.toLowerCase());
+        return matchesCat && matchesSearch;
+    });
+
+    // Stats
+    const totalRevenue = orders.reduce((s, o) => s + o.total, 0);
+    const pendingOrders = orders.filter(o => o.status !== 'Delivered').length;
+    const codTotal = orders.filter(o => o.paymentMethod === 'cod').reduce((s, o) => s + o.total, 0);
+    const onlineTotal = orders.filter(o => o.paymentMethod === 'online').reduce((s, o) => s + o.total, 0);
+
+    const scrollSlider = (dir: 'left' | 'right') => {
+        if (sliderRef.current) {
+            sliderRef.current.scrollBy({ left: dir === 'left' ? -200 : 200, behavior: 'smooth' });
+        }
     };
 
     return (
-        <div style={{ padding: '2rem', maxWidth: '1200px', margin: '0 auto', fontFamily: 'sans-serif' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '2rem' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
-                    <button
-                        onClick={() => navigate('/dashboard')}
-                        style={{ padding: '8px 16px', borderRadius: '8px', border: '1px solid #ccc', background: 'white', cursor: 'pointer' }}
-                    >
-                        ← Back to Shopping
-                    </button>
-                    <h1 style={{ margin: 0 }}>Admin Dashboard: Product Management</h1>
-                </div>
-            </div>
+        <div className="admin-shell">
 
-            {/* Dashboard Status Header Section */}
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '1.5rem', marginBottom: '2rem' }}>
-                <div style={{ background: 'linear-gradient(135deg, #e0c3fc 0%, #8ec5fc 100%)', padding: '1.5rem', borderRadius: '12px', color: '#fff', boxShadow: '0 10px 15px -3px rgba(0,0,0,0.1)', display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
-                    <div>
-                        <div style={{ fontSize: '1.2rem', marginBottom: '0.5rem', fontWeight: '600', opacity: 0.9 }}>📦 Product Status</div>
-                        <div style={{ fontSize: '2.5rem', fontWeight: '800', display: 'flex', alignItems: 'baseline', gap: '0.5rem' }}>
-                            {products.length} <span style={{ fontSize: '1rem', fontWeight: '400', opacity: 0.8 }}>Active Items</span>
+            {/* ===== BLINKIT-STYLE HEADER ===== */}
+            <header className="admin-header">
+                {/* Top accent bar */}
+                <div className="admin-accent-bar">
+                    <span className="admin-live-badge">
+                        <span className="admin-live-dot"></span>ADMIN
+                    </span>
+                    <span>⚡ B-Mart Admin Panel — Manage products, orders & deliveries</span>
+                </div>
+
+                {/* Main Nav */}
+                <div className="admin-nav">
+                    <div className="admin-nav-left">
+                        <button
+                            className={`admin-hamburger-btn ${isSidebarOpen ? 'open' : ''}`}
+                            onClick={() => setIsSidebarOpen(!isSidebarOpen)}
+                            title={isSidebarOpen ? 'Close Sidebar' : 'Open Sidebar'}
+                            aria-label="Toggle sidebar"
+                        >
+                            <span className="hb-line top"></span>
+                            <span className="hb-line mid"></span>
+                            <span className="hb-line bot"></span>
+                        </button>
+                        <div className="admin-brand">
+                            <span>🛒</span> B-Mart
+                            <span className="admin-brand-badge">Admin</span>
                         </div>
                     </div>
-                    <div style={{ marginTop: '1rem', paddingTop: '1rem', borderTop: '1px solid rgba(255,255,255,0.2)', display: 'flex', gap: '10px', fontSize: '0.85rem' }}>
-                        <button onClick={() => setShowTable(!showTable)} style={{ color: 'white', border: 'none', background: 'rgba(255,255,255,0.2)', padding: '4px 8px', borderRadius: '4px', cursor: 'pointer' }}>{showTable ? 'Hide Table' : 'View All'}</button>
-                        <button onClick={() => handleOpenForm()} style={{ color: 'white', border: 'none', background: 'rgba(255,255,255,0.2)', padding: '4px 8px', borderRadius: '4px', cursor: 'pointer' }}>+ Add New</button>
+
+                    {/* Search */}
+                    <div className="admin-search-bar">
+                        <span>🔍</span>
+                        <input
+                            type="text"
+                            placeholder="Search products, orders…"
+                            value={searchQuery}
+                            onChange={e => setSearchQuery(e.target.value)}
+                        />
+                        {searchQuery && (
+                            <button onClick={() => setSearchQuery('')}>✕</button>
+                        )}
                     </div>
-                </div>
 
-                <div style={{ background: 'linear-gradient(135deg, #f6d365 0%, #fda085 100%)', padding: '1.5rem', borderRadius: '12px', color: '#fff', boxShadow: '0 10px 15px -3px rgba(0,0,0,0.1)', display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
-                    <div>
-                        <div style={{ fontSize: '1.2rem', marginBottom: '0.5rem', fontWeight: '600', opacity: 0.9 }}>💳 Payment Status</div>
-
-                        {/* Calculate the Totals Dynamically */}
-                        {(() => {
-                            const codOrders = orders.filter(o => o.paymentMethod === 'cod');
-                            const onlineOrders = orders.filter(o => o.paymentMethod === 'online');
-
-                            const codTotal = codOrders.reduce((sum, order) => sum + order.total, 0);
-                            const onlineTotal = onlineOrders.reduce((sum, order) => sum + order.total, 0);
-                            const grandTotal = codTotal + onlineTotal;
-
-                            return (
-                                <>
-                                    <div style={{ fontSize: '2.5rem', fontWeight: '800', display: 'flex', alignItems: 'baseline', gap: '0.5rem' }}>
-                                        ₹{grandTotal.toFixed(2)} <span style={{ fontSize: '1rem', fontWeight: '400', opacity: 0.8 }}>Total Revenue</span>
-                                    </div>
-                                    <div style={{ marginTop: '0.5rem', display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
-                                        <span style={{ fontSize: '0.85rem', background: 'rgba(255,255,255,0.25)', padding: '4px 8px', borderRadius: '4px' }}>
-                                            ⚠️ Due (COD): ₹{codTotal.toFixed(2)}
-                                        </span>
-                                        <span style={{ fontSize: '0.85rem', background: 'rgba(255,255,255,0.25)', padding: '4px 8px', borderRadius: '4px' }}>
-                                            ✅ Done (Online): ₹{onlineTotal.toFixed(2)}
-                                        </span>
-                                    </div>
-                                </>
-                            );
-                        })()}
-                    </div>
-                </div>
-
-                <div style={{ background: 'linear-gradient(135deg, #84fab0 0%, #8fd3f4 100%)', padding: '1.5rem', borderRadius: '12px', color: '#fff', boxShadow: '0 10px 15px -3px rgba(0,0,0,0.1)', display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
-                    <div>
-                        <div style={{ fontSize: '1.2rem', marginBottom: '0.5rem', fontWeight: '600', opacity: 0.9 }}>🚚 Delivery Status</div>
-                        <div style={{ fontSize: '2.5rem', fontWeight: '800', display: 'flex', alignItems: 'baseline', gap: '0.5rem' }}>
-                            {orders.filter(o => o.status !== 'Delivered').length} <span style={{ fontSize: '1rem', fontWeight: '400', opacity: 0.8 }}>Pending Dispatches</span>
-                        </div>
-                    </div>
-                    <div style={{ marginTop: '1rem', paddingTop: '1rem', borderTop: '1px solid rgba(255,255,255,0.2)', display: 'flex', gap: '10px', fontSize: '0.85rem' }}>
-                        <button onClick={() => setShowOrdersTable(!showOrdersTable)} style={{ color: 'white', border: 'none', background: 'rgba(255,255,255,0.2)', padding: '4px 8px', borderRadius: '4px', cursor: 'pointer', width: '100%' }}>
-                            {showOrdersTable ? 'Hide Orders' : 'Manage Orders'}
+                    {/* Right Controls */}
+                    <div className="admin-nav-right">
+                        <button
+                            className="admin-add-btn"
+                            onClick={() => { setActiveNav('products'); handleOpenForm(); }}
+                        >
+                            + Add Product
+                        </button>
+                        <button className="admin-back-btn" onClick={() => navigate('/dashboard')}>
+                            ← Store
                         </button>
                     </div>
                 </div>
-            </div>
+            </header>
 
-            {/* Orders Table - Conditionally Rendered */}
-            {showOrdersTable && (
-                <div id="orders-table" style={{ background: 'white', borderRadius: '12px', boxShadow: '0 4px 6px rgba(0,0,0,0.1)', overflow: 'hidden', marginBottom: '2rem' }}>
-                    <div style={{ overflowX: 'auto' }}>
-                        <table style={{ width: '100%', minWidth: '800px', borderCollapse: 'collapse', textAlign: 'left' }}>
-                            <thead style={{ background: '#f8f9fa', borderBottom: '2px solid #dee2e6' }}>
-                            <tr>
-                                <th style={{ padding: '1rem' }}>Order ID</th>
-                                <th style={{ padding: '1rem' }}>Customer</th>
-                                <th style={{ padding: '1rem' }}>Total</th>
-                                <th style={{ padding: '1rem' }}>Payment</th>
-                                <th style={{ padding: '1rem' }}>Date</th>
-                                <th style={{ padding: '1rem', textAlign: 'right' }}>Delivery Status</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            {orders.length === 0 ? (
-                                <tr>
-                                    <td colSpan={6} style={{ padding: '2rem', textAlign: 'center', color: '#6c757d' }}>No orders placed yet.</td>
-                                </tr>
-                            ) : (
-                                orders.map(order => (
-                                    <tr key={order.id} style={{ borderBottom: '1px solid #eee' }}>
-                                        <td style={{ padding: '1rem', fontWeight: 'bold' }}>{order.id}</td>
-                                        <td style={{ padding: '1rem' }}>
-                                            <div style={{ fontWeight: '500' }}>{order.customerName}</div>
-                                            <div style={{ fontSize: '0.85rem', color: '#6c757d' }}>{order.phoneNumber}</div>
-                                        </td>
-                                        <td style={{ padding: '1rem', fontWeight: 'bold' }}>₹{order.total.toFixed(2)}</td>
-                                        <td style={{ padding: '1rem' }}>
-                                            {order.paymentMethod === 'cod' ? (
-                                                <span style={{ fontSize: '0.85rem', background: '#ffeeba', color: '#856404', padding: '4px 8px', borderRadius: '4px' }}>COD</span>
-                                            ) : (
-                                                <span style={{ fontSize: '0.85rem', background: '#d4edda', color: '#155724', padding: '4px 8px', borderRadius: '4px' }}>Online</span>
-                                            )}
-                                        </td>
-                                        <td style={{ padding: '1rem', color: '#6c757d', fontSize: '0.9rem' }}>
-                                            {new Date(order.createdAt).toLocaleString()}
-                                        </td>
-                                        <td style={{ padding: '1rem', textAlign: 'right' }}>
-                                            <select 
-                                                value={order.status} 
-                                                onChange={(e) => updateOrderStatus(order.id, e.target.value)}
-                                                style={{ 
-                                                    padding: '6px 10px', 
-                                                    borderRadius: '6px', 
-                                                    border: order.status === 'Delivered' ? '1px solid #28a745' : '1px solid #007bff',
-                                                    background: order.status === 'Delivered' ? '#d4edda' : '#e7f1ff',
-                                                    color: order.status === 'Delivered' ? '#155724' : '#004085',
-                                                    fontWeight: 'bold',
-                                                    cursor: 'pointer',
-                                                    outline: 'none'
-                                                }}
-                                            >
-                                                <option value="Processing">⏳ Processing</option>
-                                                <option value="Packing">📦 Packing</option>
-                                                <option value="On the Way">🚚 On the Way</option>
-                                                <option value="Delivered">✅ Delivered</option>
-                                            </select>
-                                        </td>
-                                    </tr>
-                                ))
-                            )}
-                        </tbody>
-                    </table>
-                    </div>
-                </div>
+
+            {/* Sidebar overlay — only on mobile/tablet */}
+            {isSidebarOpen && window.innerWidth < 1024 && (
+                <div
+                    className="admin-sidebar-overlay"
+                    onClick={() => setIsSidebarOpen(false)}
+                />
             )}
 
-            {/* Product Table - Conditionally Rendered */}
-            {showTable && (
-                <div id="product-table" style={{ background: 'white', borderRadius: '12px', boxShadow: '0 4px 6px rgba(0,0,0,0.1)', overflow: 'hidden' }}>
-                    {isLoading ? (
-                        <div style={{ padding: '2rem', textAlign: 'center' }}>Loading products...</div>
-                    ) : (
-                        <div style={{ overflowX: 'auto' }}>
-                            <table style={{ width: '100%', minWidth: '700px', borderCollapse: 'collapse', textAlign: 'left' }}>
-                                <thead style={{ background: '#f8f9fa', borderBottom: '2px solid #dee2e6' }}>
-                                <tr>
-                                    <th style={{ padding: '1rem' }}>Image</th>
-                                    <th style={{ padding: '1rem' }}>Name</th>
-                                    <th style={{ padding: '1rem' }}>Category</th>
-                                    <th style={{ padding: '1rem' }}>Unit</th>
-                                    <th style={{ padding: '1rem' }}>Price</th>
-                                    <th style={{ padding: '1rem', textAlign: 'right' }}>Actions</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                {products.length === 0 ? (
-                                    <tr>
-                                        <td colSpan={6} style={{ padding: '2rem', textAlign: 'center', color: '#6c757d' }}>No products found. Add one to get started!</td>
-                                    </tr>
-                                ) : (
-                                    products.map(product => (
-                                        <tr key={product._id} style={{ borderBottom: '1px solid #eee' }}>
-                                            <td style={{ padding: '1rem' }}>
-                                                <div style={{ width: '50px', height: '50px', background: '#f8f9fa', borderRadius: '8px', display: 'flex', justifyContent: 'center', alignItems: 'center', overflow: 'hidden' }}>
-                                                    {product.image.startsWith('http') || product.image.startsWith('data:')
-                                                        ? <img src={product.image} alt={product.name} style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain' }} />
-                                                        : <span style={{ fontSize: '0.8rem', color: '#aaa' }}>Local Img</span>
-                                                    }
-                                                </div>
-                                            </td>
-                                            <td style={{ padding: '1rem', fontWeight: '500' }}>{product.name}</td>
-                                            <td style={{ padding: '1rem', color: '#495057' }}>{getCategoryName(product.categoryId)}</td>
-                                            <td style={{ padding: '1rem', color: '#495057' }}>{product.unit}</td>
-                                            <td style={{ padding: '1rem' }}>
-                                                <div style={{ fontWeight: 'bold' }}>₹{product.price}</div>
-                                                {product.originalPrice && <div style={{ fontSize: '0.85rem', textDecoration: 'line-through', color: '#adb5bd' }}>₹{product.originalPrice}</div>}
-                                            </td>
-                                            <td style={{ padding: '1rem', textAlign: 'right' }}>
-                                                <button
-                                                    onClick={() => handleOpenForm(product)}
-                                                    style={{ marginRight: '0.5rem', padding: '6px 12px', borderRadius: '4px', border: '1px solid #007bff', background: 'transparent', color: '#007bff', cursor: 'pointer' }}
-                                                >
-                                                    Edit
-                                                </button>
-                                                <button
-                                                    onClick={() => handleDelete(product._id)}
-                                                    style={{ padding: '6px 12px', borderRadius: '4px', border: '1px solid #dc3545', background: 'transparent', color: '#dc3545', cursor: 'pointer' }}
-                                                >
-                                                    Delete
-                                                </button>
-                                            </td>
-                                        </tr>
-                                    ))
-                                )}
-                            </tbody>
-                        </table>
+            {/* ===== BODY: SIDEBAR + MAIN ===== */}
+            <div className="admin-body">
+
+                {/* Sidebar */}
+                <aside className={`admin-sidebar ${isSidebarOpen ? '' : 'collapsed'}`}>
+
+                    {/* Stats Quick View */}
+                    <div className="admin-sidebar-stat">
+                        <div className="asis-row">
+                            <span className="asis-icon">📦</span>
+                            <div>
+                                <div className="asis-val">{products.length}</div>
+                                <div className="asis-lbl">Products</div>
+                            </div>
+                        </div>
+                    </div>
+                    <div className="admin-sidebar-stat green">
+                        <div className="asis-row">
+                            <span className="asis-icon">🚚</span>
+                            <div>
+                                <div className="asis-val">{orders.length}</div>
+                                <div className="asis-lbl">Total Orders</div>
+                            </div>
+                        </div>
+                    </div>
+                    <div className="admin-sidebar-stat orange">
+                        <div className="asis-row">
+                            <span className="asis-icon">⏳</span>
+                            <div>
+                                <div className="asis-val">{pendingOrders}</div>
+                                <div className="asis-lbl">Pending</div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div className="admin-sidebar-divider"></div>
+
+                    {/* Nav Links */}
+                    <nav className="admin-sidebar-nav">
+                        {ADMIN_NAV.map(item => (
+                            <button
+                                key={item.id}
+                                className={`admin-nav-item ${activeNav === item.id ? 'active' : ''}`}
+                                onClick={() => setActiveNav(item.id as any)}
+                            >
+                                <span className="ani-icon">{item.icon}</span>
+                                {isSidebarOpen && <span>{item.label}</span>}
+                                {activeNav === item.id && <span className="ani-dot"></span>}
+                            </button>
+                        ))}
+                    </nav>
+
+                    <div className="admin-sidebar-divider"></div>
+
+                    {/* Category Quick Nav */}
+                    {isSidebarOpen && (
+                        <div className="admin-sidebar-cats">
+                            <div className="asc-title">📂 Categories</div>
+                            {CATEGORIES.slice(1).map(cat => (
+                                <button
+                                    key={cat.id}
+                                    className={`asc-item ${activeCategory === cat.id ? 'active' : ''}`}
+                                    onClick={() => { setActiveCategory(cat.id); setActiveNav('products'); }}
+                                >
+                                    <span>{cat.icon}</span>
+                                    <span>{cat.name}</span>
+                                    <span className="asc-count">{products.filter(p => p.categoryId === cat.id).length}</span>
+                                </button>
+                            ))}
                         </div>
                     )}
-                </div>
-            )}
+                </aside>
 
-            {/* Add/Edit Modal */}
+                {/* ===== MAIN CONTENT ===== */}
+                <main className="admin-main">
+
+                    {/* OVERVIEW TAB */}
+                    {activeNav === 'overview' && (
+                        <div>
+                            <div className="admin-section-title">📊 Dashboard Overview</div>
+
+                            {/* Stat Cards */}
+                            <div className="admin-stats-grid">
+                                <div className="admin-stat-card purple">
+                                    <div className="asc-top">
+                                        <span className="asc-emoji">📦</span>
+                                        <div className="asc-label">Active Products</div>
+                                    </div>
+                                    <div className="asc-big">{products.length}</div>
+                                    <div className="asc-sub">Items in catalog</div>
+                                    <div className="asc-actions">
+                                        <button onClick={() => setActiveNav('products')}>View All</button>
+                                        <button onClick={() => { setActiveNav('products'); handleOpenForm(); }}>+ Add</button>
+                                    </div>
+                                </div>
+
+                                <div className="admin-stat-card amber">
+                                    <div className="asc-top">
+                                        <span className="asc-emoji">💳</span>
+                                        <div className="asc-label">Total Revenue</div>
+                                    </div>
+                                    <div className="asc-big">₹{totalRevenue.toFixed(0)}</div>
+                                    <div className="asc-sub-row">
+                                        <span className="badge-cod">COD ₹{codTotal.toFixed(0)}</span>
+                                        <span className="badge-online">Online ₹{onlineTotal.toFixed(0)}</span>
+                                    </div>
+                                </div>
+
+                                <div className="admin-stat-card teal">
+                                    <div className="asc-top">
+                                        <span className="asc-emoji">🚚</span>
+                                        <div className="asc-label">Pending Dispatches</div>
+                                    </div>
+                                    <div className="asc-big">{pendingOrders}</div>
+                                    <div className="asc-sub">Out of {orders.length} orders</div>
+                                    <div className="asc-actions">
+                                        <button onClick={() => setActiveNav('orders')}>Manage Orders</button>
+                                    </div>
+                                </div>
+
+                                <div className="admin-stat-card green">
+                                    <div className="asc-top">
+                                        <span className="asc-emoji">✅</span>
+                                        <div className="asc-label">Delivered</div>
+                                    </div>
+                                    <div className="asc-big">{orders.filter(o => o.status === 'Delivered').length}</div>
+                                    <div className="asc-sub">Successfully completed</div>
+                                </div>
+                            </div>
+
+                            {/* Recent Orders Quick View */}
+                            <div className="admin-section-title" style={{ marginTop: '2rem' }}>🕐 Recent Orders</div>
+                            <div className="admin-table-wrap">
+                                <table className="admin-table">
+                                    <thead>
+                                        <tr>
+                                            <th>Order ID</th>
+                                            <th>Customer</th>
+                                            <th>Total</th>
+                                            <th>Payment</th>
+                                            <th>Status</th>
+                                            <th>Date</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {orders.slice(0, 5).map(order => (
+                                            <tr key={order.id}>
+                                                <td><span className="order-id-chip">{order.id}</span></td>
+                                                <td>{order.customerName}</td>
+                                                <td><strong>₹{order.total?.toFixed(2)}</strong></td>
+                                                <td>
+                                                    <span className={order.paymentMethod === 'cod' ? 'badge-cod' : 'badge-online'}>
+                                                        {order.paymentMethod === 'cod' ? 'COD' : 'Online'}
+                                                    </span>
+                                                </td>
+                                                <td>
+                                                    <span className={`status-badge status-${order.status?.toLowerCase().replace(/\s/g, '-')}`}>
+                                                        {order.status}
+                                                    </span>
+                                                </td>
+                                                <td style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
+                                                    {new Date(order.createdAt).toLocaleDateString()}
+                                                </td>
+                                            </tr>
+                                        ))}
+                                        {orders.length === 0 && (
+                                            <tr><td colSpan={6} style={{ textAlign: 'center', padding: '2rem', color: 'var(--text-secondary)' }}>No orders yet.</td></tr>
+                                        )}
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    )}
+
+                    {/* PRODUCTS TAB */}
+                    {activeNav === 'products' && (
+                        <div>
+                            <div className="admin-section-header">
+                                <div className="admin-section-title">
+                                    📦 Products
+                                    <span className="section-count">{filteredProducts.length}</span>
+                                </div>
+                                <button className="btn-primary-admin" onClick={() => handleOpenForm()}>
+                                    + Add Product
+                                </button>
+                            </div>
+
+                            {isLoading ? (
+                                <div className="admin-loading">
+                                    <div className="admin-spinner"></div>
+                                    <span>Loading products…</span>
+                                </div>
+                            ) : (
+                                <div className="admin-table-wrap">
+                                    <table className="admin-table">
+                                        <thead>
+                                            <tr>
+                                                <th>Image</th>
+                                                <th>Name</th>
+                                                <th>Category</th>
+                                                <th>Unit</th>
+                                                <th>Price</th>
+                                                <th style={{ textAlign: 'right' }}>Actions</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            {filteredProducts.length === 0 ? (
+                                                <tr><td colSpan={6} style={{ textAlign: 'center', padding: '2rem', color: 'var(--text-secondary)' }}>No products found.</td></tr>
+                                            ) : (
+                                                filteredProducts.map(product => (
+                                                    <tr key={product._id}>
+                                                        <td>
+                                                            <div className="prod-thumb">
+                                                                {product.image.startsWith('http') || product.image.startsWith('data:')
+                                                                    ? <img src={product.image} alt={product.name} />
+                                                                    : <span style={{ fontSize: '0.75rem', color: '#aaa' }}>IMG</span>
+                                                                }
+                                                            </div>
+                                                        </td>
+                                                        <td><span className="prod-name">{product.name}</span></td>
+                                                        <td>
+                                                            <span className="cat-pill">
+                                                                {getCategoryIcon(product.categoryId)} {getCategoryName(product.categoryId)}
+                                                            </span>
+                                                        </td>
+                                                        <td style={{ color: 'var(--text-secondary)', fontSize: '0.9rem' }}>{product.unit}</td>
+                                                        <td>
+                                                            <div className="price-col">
+                                                                <span className="price-main">₹{product.price}</span>
+                                                                {product.originalPrice && <span className="price-old">₹{product.originalPrice}</span>}
+                                                            </div>
+                                                        </td>
+                                                        <td>
+                                                            <div className="action-btns">
+                                                                <button className="btn-edit" onClick={() => handleOpenForm(product)}>✏️ Edit</button>
+                                                                <button className="btn-delete" onClick={() => handleDelete(product._id)}>🗑️ Delete</button>
+                                                            </div>
+                                                        </td>
+                                                    </tr>
+                                                ))
+                                            )}
+                                        </tbody>
+                                    </table>
+                                </div>
+                            )}
+                        </div>
+                    )}
+
+                    {/* ORDERS TAB */}
+                    {activeNav === 'orders' && (
+                        <div>
+                            <div className="admin-section-header">
+                                <div className="admin-section-title">
+                                    🚚 Orders
+                                    <span className="section-count">{orders.length}</span>
+                                </div>
+                                <button className="btn-primary-admin" onClick={fetchOrders}>↻ Refresh</button>
+                            </div>
+
+                            <div className="admin-table-wrap">
+                                <table className="admin-table">
+                                    <thead>
+                                        <tr>
+                                            <th>Order ID</th>
+                                            <th>Customer</th>
+                                            <th>Total</th>
+                                            <th>Payment</th>
+                                            <th>Date</th>
+                                            <th style={{ textAlign: 'right' }}>Delivery Status</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {orders.length === 0 ? (
+                                            <tr><td colSpan={6} style={{ textAlign: 'center', padding: '2rem', color: 'var(--text-secondary)' }}>No orders placed yet.</td></tr>
+                                        ) : (
+                                            orders.map(order => (
+                                                <tr key={order.id}>
+                                                    <td><span className="order-id-chip">{order.id}</span></td>
+                                                    <td>
+                                                        <div style={{ fontWeight: 600 }}>{order.customerName}</div>
+                                                        <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>{order.phoneNumber}</div>
+                                                    </td>
+                                                    <td><strong>₹{order.total?.toFixed(2)}</strong></td>
+                                                    <td>
+                                                        <span className={order.paymentMethod === 'cod' ? 'badge-cod' : 'badge-online'}>
+                                                            {order.paymentMethod === 'cod' ? '💵 COD' : '📱 Online'}
+                                                        </span>
+                                                    </td>
+                                                    <td style={{ fontSize: '0.82rem', color: 'var(--text-secondary)' }}>
+                                                        {new Date(order.createdAt).toLocaleString()}
+                                                    </td>
+                                                    <td>
+                                                        <select
+                                                            className="status-select"
+                                                            value={order.status}
+                                                            onChange={e => updateOrderStatus(order.id, e.target.value)}
+                                                            data-status={order.status}
+                                                        >
+                                                            <option value="Processing">⏳ Processing</option>
+                                                            <option value="Packing">📦 Packing</option>
+                                                            <option value="On the Way">🚚 On the Way</option>
+                                                            <option value="Delivered">✅ Delivered</option>
+                                                        </select>
+                                                    </td>
+                                                </tr>
+                                            ))
+                                        )}
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    )}
+
+                </main>
+            </div>
+
+            {/* ===== ADD/EDIT MODAL ===== */}
             {isFormOpen && (
-                <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 1000 }}>
-                    <div style={{ background: 'white', padding: '2rem', borderRadius: '12px', width: '90%', maxWidth: '500px', maxHeight: '90vh', overflowY: 'auto' }}>
-                        <h2 style={{ marginTop: 0, marginBottom: '1.5rem' }}>{editingId ? 'Edit Product' : 'Add New Product'}</h2>
+                <div className="admin-modal-overlay" onClick={handleCloseForm}>
+                    <div className="admin-modal" onClick={e => e.stopPropagation()}>
+                        <div className="admin-modal-header">
+                            <h2>{editingId ? '✏️ Edit Product' : '➕ Add New Product'}</h2>
+                            <button className="modal-close-btn" onClick={handleCloseForm}>✕</button>
+                        </div>
 
-                        <form onSubmit={handleSave} style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-                            <div>
-                                <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: 'bold' }}>Product Name</label>
-                                <input required type="text" value={formData.name} onChange={e => setFormData({ ...formData, name: e.target.value })} style={{ width: '100%', padding: '10px', borderRadius: '6px', border: '1px solid #ccc', boxSizing: 'border-box' }} />
-                            </div>
-
-                            <div style={{ display: 'flex', gap: '1rem' }}>
-                                <div style={{ flex: 1 }}>
-                                    <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: 'bold' }}>Price (₹)</label>
-                                    <input required type="number" step="0.01" value={formData.price} onChange={e => setFormData({ ...formData, price: e.target.value })} style={{ width: '100%', padding: '10px', borderRadius: '6px', border: '1px solid #ccc', boxSizing: 'border-box' }} />
-                                </div>
-                                <div style={{ flex: 1 }}>
-                                    <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: 'bold' }}>Original Price (₹) - Optional</label>
-                                    <input type="number" step="0.01" value={formData.originalPrice} onChange={e => setFormData({ ...formData, originalPrice: e.target.value })} style={{ width: '100%', padding: '10px', borderRadius: '6px', border: '1px solid #ccc', boxSizing: 'border-box' }} />
+                        <form onSubmit={handleSave} className="admin-form">
+                            <div className="form-row">
+                                <div className="form-field">
+                                    <label>Product Name *</label>
+                                    <input required type="text" value={formData.name}
+                                        onChange={e => setFormData({ ...formData, name: e.target.value })}
+                                        placeholder="e.g. Fortune Sunflower Oil" />
                                 </div>
                             </div>
 
-                            <div style={{ display: 'flex', gap: '1rem' }}>
-                                <div style={{ flex: 1 }}>
-                                    <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: 'bold' }}>Unit (e.g., 1L, 5kg)</label>
-                                    <input required type="text" value={formData.unit} onChange={e => setFormData({ ...formData, unit: e.target.value })} style={{ width: '100%', padding: '10px', borderRadius: '6px', border: '1px solid #ccc', boxSizing: 'border-box' }} />
+                            <div className="form-row two-col">
+                                <div className="form-field">
+                                    <label>Price (₹) *</label>
+                                    <input required type="number" step="0.01" value={formData.price}
+                                        onChange={e => setFormData({ ...formData, price: e.target.value })}
+                                        placeholder="e.g. 120" />
                                 </div>
-                                <div style={{ flex: 1 }}>
-                                    <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: 'bold' }}>Delivery Time</label>
-                                    <input required type="text" value={formData.delivery} onChange={e => setFormData({ ...formData, delivery: e.target.value })} style={{ width: '100%', padding: '10px', borderRadius: '6px', border: '1px solid #ccc', boxSizing: 'border-box' }} />
+                                <div className="form-field">
+                                    <label>Original Price (₹) — Optional</label>
+                                    <input type="number" step="0.01" value={formData.originalPrice}
+                                        onChange={e => setFormData({ ...formData, originalPrice: e.target.value })}
+                                        placeholder="e.g. 150" />
                                 </div>
                             </div>
 
-                            <div>
-                                <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: 'bold' }}>Category</label>
-                                <select value={formData.categoryId} onChange={e => setFormData({ ...formData, categoryId: e.target.value })} style={{ width: '100%', padding: '10px', borderRadius: '6px', border: '1px solid #ccc', boxSizing: 'border-box' }}>
-                                    {CATEGORIES.map(cat => (
-                                        <option key={cat.id} value={cat.id}>{cat.name}</option>
+                            <div className="form-row two-col">
+                                <div className="form-field">
+                                    <label>Unit *</label>
+                                    <input required type="text" value={formData.unit}
+                                        onChange={e => setFormData({ ...formData, unit: e.target.value })}
+                                        placeholder="e.g. 1L, 500g" />
+                                </div>
+                                <div className="form-field">
+                                    <label>Delivery Time *</label>
+                                    <input required type="text" value={formData.delivery}
+                                        onChange={e => setFormData({ ...formData, delivery: e.target.value })}
+                                        placeholder="e.g. 10 MINS" />
+                                </div>
+                            </div>
+
+                            <div className="form-field">
+                                <label>Category *</label>
+                                <select value={formData.categoryId} onChange={e => setFormData({ ...formData, categoryId: e.target.value })}>
+                                    {CATEGORIES.slice(1).map(cat => (
+                                        <option key={cat.id} value={cat.id}>{cat.icon} {cat.name}</option>
                                     ))}
                                 </select>
                             </div>
 
-                            <div>
-                                <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: 'bold' }}>Image URL</label>
-                                <input required type="text" placeholder="https://..." value={formData.image} onChange={e => setFormData({ ...formData, image: e.target.value })} style={{ width: '100%', padding: '10px', borderRadius: '6px', border: '1px solid #ccc', boxSizing: 'border-box' }} />
-                                <small style={{ color: '#6c757d', display: 'block', marginTop: '0.25rem' }}>For now, paste a direct URL to an image or a base64 string.</small>
+                            <div className="form-field">
+                                <label>Image URL *</label>
+                                <input required type="text" value={formData.image}
+                                    onChange={e => setFormData({ ...formData, image: e.target.value })}
+                                    placeholder="https://... or data:image/..." />
+                                <small>Paste a direct image URL or base64 string.</small>
                             </div>
 
-                            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '1rem', marginTop: '1rem' }}>
-                                <button type="button" onClick={handleCloseForm} style={{ padding: '10px 20px', borderRadius: '8px', border: '1px solid #ccc', background: 'white', cursor: 'pointer' }}>Cancel</button>
-                                <button type="submit" style={{ padding: '10px 20px', borderRadius: '8px', border: 'none', background: 'var(--action-color)', color: 'white', fontWeight: 'bold', cursor: 'pointer' }}>Save Product</button>
+                            {formData.image && (formData.image.startsWith('http') || formData.image.startsWith('data:')) && (
+                                <div className="form-preview">
+                                    <img src={formData.image} alt="preview" />
+                                    <span>Image Preview</span>
+                                </div>
+                            )}
+
+                            <div className="form-actions">
+                                <button type="button" className="btn-cancel" onClick={handleCloseForm}>Cancel</button>
+                                <button type="submit" className="btn-save">
+                                    {editingId ? '💾 Save Changes' : '➕ Add Product'}
+                                </button>
                             </div>
                         </form>
                     </div>

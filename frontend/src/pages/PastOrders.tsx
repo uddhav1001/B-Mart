@@ -45,10 +45,11 @@ export default function PastOrders() {
                 const data = await res.json();
                 
                 if (data.success && data.orders) {
-                    // Sort descending (newest first)
-                    const sortedOrders = data.orders.sort((a: any, b: any) => {
-                        return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
-                    });
+                    const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+                    // Sort descending (newest first) and keep only last 30 days
+                    const sortedOrders = data.orders
+                        .filter((o: any) => new Date(o.createdAt) >= thirtyDaysAgo)
+                        .sort((a: any, b: any) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
                     setOrders(sortedOrders);
                 }
             } catch (err) {
@@ -76,8 +77,27 @@ export default function PastOrders() {
             <div className="profile-content" style={{ padding: '2rem' }}>
                 <div className="profile-card" style={{ maxWidth: '800px', margin: '0 auto' }}>
                     <div className="profile-header">
-                        <h2>Order History 📋</h2>
-                        <p>View all your previous purchases here.</p>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '0.75rem' }}>
+                            <div>
+                                <h2>Order History 📋</h2>
+                                <p>View all your previous purchases here.</p>
+                            </div>
+                            <span style={{
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: '6px',
+                                fontSize: '0.78rem',
+                                fontWeight: 700,
+                                color: '#0c831f',
+                                background: '#f3fcf4',
+                                border: '1px solid #c3e6cb',
+                                borderRadius: '20px',
+                                padding: '4px 12px',
+                                whiteSpace: 'nowrap',
+                            }}>
+                                🗓️ Orders saved for 30 days
+                            </span>
+                        </div>
                     </div>
 
                     {orders.length === 0 ? (

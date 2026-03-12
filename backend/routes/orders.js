@@ -1,12 +1,11 @@
 const express = require('express');
 const router = express.Router();
-
-// Memory store for mock orders
-const orders = [];
+const Order = require('../models/Order');
 
 // Get all orders (Admin Panel)
 router.get('/', async (req, res) => {
     try {
+        const orders = await Order.find().sort({ createdAt: -1 });
         res.status(200).json(orders);
     } catch (error) {
         console.error("Error fetching orders:", error);
@@ -19,28 +18,42 @@ router.post('/', async (req, res) => {
     try {
         const { orderId, items, total, paymentMethod, phoneNumber, customerName, email } = req.body;
 
-        // Fallbacks for mocking in development if not provided by frontend yet
-        const destPhone = phoneNumber || '+1234567890';
-        const name = customerName || 'B-Mart Customer';
-        const userEmail = email || 'guest@bmart.com';
-
-        const newOrder = {
+        const newOrder = new Order({
             id: orderId || `ORD-${Math.floor(100000 + Math.random() * 900000)}`,
             items: items || [],
             total: total || 0,
             paymentMethod: paymentMethod || 'cod',
             status: 'Processing',
-            phoneNumber: destPhone,
-            customerName: name,
-            email: userEmail,
-            createdAt: new Date()
-        };
+            phoneNumber: phoneNumber || '',
+            customerName: customerName || 'B-Mart Customer',
+            email: email || 'guest@bmart.com',
+            createdAt: new Date(),
+        });
 
-        orders.push(newOrder);
+        await newOrder.save();
 
-        res.status(201).json({ success: true, order: newOrder, message: "Order placed." });
+        res.status(201).json({ success: true, order: newOrder, message: "Order placed successfully." });
     } catch (error) {
         console.error("Error creating order:", error);
+        res.status(500).json({ success: false, message: 'Server error' });
+    }
+});
+
+// Get orders by User Email (Order History & Active Orders UI)
+// NOTE: Must be defined BEFORE /:id to avoid "user" being treated as an id
+router.get('/user/:email', async (req, res) => {
+    try {
+        const userEmail = req.params.email;
+        const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+
+        const userOrders = await Order.find({
+            email: userEmail,
+            createdAt: { $gte: thirtyDaysAgo },
+        }).sort({ createdAt: -1 });
+
+        res.status(200).json({ success: true, orders: userOrders });
+    } catch (error) {
+        console.error(`Error fetching orders for user ${req.params.email}:`, error);
         res.status(500).json({ success: false, message: 'Server error' });
     }
 });
@@ -48,8 +61,7 @@ router.post('/', async (req, res) => {
 // Get specific order by ID (Order Tracking)
 router.get('/:id', async (req, res) => {
     try {
-        const orderId = req.params.id;
-        const order = orders.find(o => o.id === orderId);
+        const order = await Order.findOne({ id: req.params.id });
 
         if (!order) {
             return res.status(404).json({ success: false, message: 'Order not found' });
@@ -62,35 +74,23 @@ router.get('/:id', async (req, res) => {
     }
 });
 
-// Get orders by User Email (Active Orders Profile UI)
-router.get('/user/:email', async (req, res) => {
-    try {
-        const userEmail = req.params.email;
-        const userOrders = orders.filter(o => o.email === userEmail);
-        
-        res.status(200).json({ success: true, orders: userOrders });
-    } catch (error) {
-        console.error(`Error fetching orders for user ${req.params.email}:`, error);
-        res.status(500).json({ success: false, message: 'Server error' });
-    }
-});
-
-// Update order status (Delivery completion)
+// Update order status (Delivery completion / tracking)
 router.put('/:id/status', async (req, res) => {
     try {
-        const orderId = req.params.id;
-        const { status } = req.body; // e.g., 'Delivered'
+        const { status } = req.body;
 
-        const order = orders.find(o => o.id === orderId);
+        const order = await Order.findOneAndUpdate(
+            { id: req.params.id },
+            { status },
+            { new: true }
+        );
 
         if (!order) {
-            return res.status(200).json({ success: true, message: `Status updated to ${status}. (Mock order).` });
+            // Gracefully handle mock orders that may not exist in DB
+            return res.status(200).json({ success: true, message: `Status updated to ${status}. (Order not found in DB — may be a mock order).` });
         }
 
-        order.status = status;
-
         res.status(200).json({ success: true, order, message: `Status updated to ${status}.` });
-
     } catch (error) {
         console.error(`Error updating order ${req.params.id}:`, error);
         res.status(500).json({ success: false, message: 'Server error' });

@@ -17,7 +17,7 @@ interface CartContextType {
     cart: CartItem[];
     addToCart: (product: Omit<CartItem, 'quantity'>) => void;
     removeFromCart: (productId: string) => void;
-    updateQuantity: (productId: string, delta: number) => void;
+    updateQuantity: (productId: string, newQuantity: number) => void;
     clearCart: () => void;
     totalItems: number;
     subtotal: number;
@@ -59,16 +59,16 @@ export const CartProvider = ({ children }: { children: ReactNode }) => {
         setCart((prevCart) => prevCart.filter((item) => item.id !== productId));
     };
 
-    const updateQuantity = (productId: string, delta: number) => {
-        setCart((prevCart) =>
-            prevCart.map((item) => {
-                if (item.id === productId) {
-                    const newQuantity = Math.max(0, item.quantity + delta);
-                    return { ...item, quantity: newQuantity };
-                }
-                return item;
-            }).filter((item) => item.quantity > 0)
-        );
+    const updateQuantity = (productId: string, newQuantity: number) => {
+        if (newQuantity <= 0) {
+            setCart((prev) => prev.filter((item) => item.id !== productId));
+        } else {
+            setCart((prev) =>
+                prev.map((item) =>
+                    item.id === productId ? { ...item, quantity: newQuantity } : item
+                )
+            );
+        }
     };
 
     const clearCart = () => setCart([]);

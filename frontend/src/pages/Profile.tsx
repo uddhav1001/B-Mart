@@ -106,7 +106,7 @@ export default function Profile() {
             </nav>
 
             <div className="profile-content">
-                <div className="profile-card">
+                <div className="profile-card" style={{ maxWidth: '800px', margin: '0 auto' }}>
                     <div className="profile-header">
                         <h2>My Profile</h2>
                         <p>Manage your personal information and preferences.</p>
