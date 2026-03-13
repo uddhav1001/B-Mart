@@ -43,7 +43,6 @@ export default function Dashboard() {
     const [addressError, setAddressError] = useState('');
     const [searchQuery, setSearchQuery] = useState('');
     const [isGroceryOpen, setIsGroceryOpen] = useState(true);
-    const [paymentMethod, setPaymentMethod] = useState('cod');
     const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(() => window.innerWidth < 1024);
 
     const { cart, addToCart, removeFromCart, updateQuantity, clearCart, totalItems, subtotal } = useContext(CartContext);
@@ -159,40 +158,10 @@ export default function Dashboard() {
         }
     };
 
-    const handleCheckout = async () => {
+    const handleCheckout = () => {
         if (cart.length === 0) return;
-
-        const orderId = `ORD-${Math.floor(100000 + Math.random() * 900000)}`;
-
-        try {
-            await fetch('http://localhost:5000/api/orders', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    orderId,
-                    items: cart,
-                    total: subtotal,
-                    paymentMethod,
-                    customerName: userName,
-                    email: userEmail,
-                    phoneNumber: null
-                })
-            });
-        } catch (e) {
-            console.error("Failed to notify backend of new order", e);
-        }
-
-        navigate('/tracking', {
-            state: {
-                items: [...cart],
-                total: subtotal,
-                orderId: orderId,
-                paymentMethod: paymentMethod
-            }
-        });
-
-        clearCart();
         setIsCartOpen(false);
+        navigate('/checkout');
     };
 
     return (
@@ -722,8 +691,9 @@ export default function Dashboard() {
                         <div className="cart-body">
                             {cart.length === 0 ? (
                                 <div className="empty-cart">
-                                    <span style={{ fontSize: '3rem' }}>🛒</span>
-                                    <p>Your cart is empty.</p>
+                                    <span style={{ fontSize: '3.5rem' }}>🛒</span>
+                                    <p style={{ fontWeight: 600, marginBottom: '0.3rem' }}>Your cart is empty</p>
+                                    <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>Add items to get started</p>
                                 </div>
                             ) : (
                                 cart.map(item => (
@@ -733,15 +703,24 @@ export default function Dashboard() {
                                             <div className="cart-item-name">{item.name}</div>
                                             <div className="cart-item-unit">{item.unit}</div>
                                             <div className="cart-item-bottom">
-                                                <div className="cart-item-price">₹{item.price.toFixed(2)}</div>
-                                                <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                                                    <span style={{ fontSize: '0.9rem', fontWeight: '500', color: 'var(--text-secondary)' }}>Qty: {item.quantity}</span>
-                                                    <button 
-                                                        onClick={() => removeFromCart(item.id)}
-                                                        style={{ background: 'none', border: 'none', color: '#ef4444', cursor: 'pointer', fontSize: '0.85rem', padding: '4px 8px', borderRadius: '4px', backgroundColor: 'rgba(239, 68, 68, 0.1)' }}
-                                                    >
-                                                        Remove
-                                                    </button>
+                                                <div className="cart-item-price">
+                                                    ₹{(item.price * item.quantity).toFixed(2)}
+                                                    {item.quantity > 1 && (
+                                                        <span style={{ fontSize: '0.72rem', color: 'var(--text-secondary)', fontWeight: 400, marginLeft: '4px' }}>
+                                                            (₹{item.price.toFixed(0)} × {item.quantity})
+                                                        </span>
+                                                    )}
+                                                </div>
+                                                <div className="cart-qty-controls">
+                                                    <button
+                                                        className="cart-qty-btn"
+                                                        onClick={() => updateQuantity(item.id, item.quantity - 1)}
+                                                    >−</button>
+                                                    <span className="cart-qty-val">{item.quantity}</span>
+                                                    <button
+                                                        className="cart-qty-btn cart-qty-plus"
+                                                        onClick={() => updateQuantity(item.id, item.quantity + 1)}
+                                                    >+</button>
                                                 </div>
                                             </div>
                                         </div>
@@ -752,71 +731,21 @@ export default function Dashboard() {
 
                         {cart.length > 0 && (
                             <div className="cart-footer">
-                                <div className="payment-method-section" style={{ backgroundColor: 'var(--bg-color)', padding: '1rem', borderRadius: '12px', marginBottom: '1rem' }}>
-                                    <div style={{ fontWeight: 'bold', marginBottom: '0.8rem', color: 'var(--text-primary)' }}>Payment Method</div>
-                                    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.8rem' }}>
-                                        <label style={{ display: 'flex', alignItems: 'center', gap: '10px', cursor: 'pointer', padding: '10px', border: paymentMethod === 'cod' ? '1px solid var(--action-color)' : '1px solid var(--panel-border)', borderRadius: '8px', backgroundColor: paymentMethod === 'cod' ? 'var(--action-color-light, rgba(76, 175, 80, 0.1))' : 'transparent', transition: 'all 0.2s' }}>
-                                            <input
-                                                type="radio"
-                                                name="paymentMethod"
-                                                value="cod"
-                                                checked={paymentMethod === 'cod'}
-                                                onChange={(e) => setPaymentMethod(e.target.value)}
-                                                style={{ accentColor: 'var(--action-color)' }}
-                                            />
-                                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flex: 1 }}>
-                                                <span style={{ fontSize: '1.2rem' }}>💵</span>
-                                                <div>
-                                                    <div style={{ fontWeight: 500, color: 'var(--text-primary)' }}>Cash on Delivery</div>
-                                                    <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>Pay exactly when it arrives.</div>
-                                                </div>
-                                            </div>
-                                        </label>
-
-                                        <label style={{ display: 'flex', alignItems: 'flex-start', gap: '10px', cursor: 'pointer', padding: '10px', border: paymentMethod === 'online' ? '1px solid var(--action-color)' : '1px solid var(--panel-border)', borderRadius: '8px', backgroundColor: paymentMethod === 'online' ? 'var(--action-color-light, rgba(76, 175, 80, 0.1))' : 'transparent', transition: 'all 0.2s' }}>
-                                            <div style={{ paddingTop: '4px' }}>
-                                                <input
-                                                    type="radio"
-                                                    name="paymentMethod"
-                                                    value="online"
-                                                    checked={paymentMethod === 'online'}
-                                                    onChange={(e) => setPaymentMethod(e.target.value)}
-                                                    style={{ accentColor: 'var(--action-color)' }}
-                                                />
-                                            </div>
-                                            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', flex: 1 }}>
-                                                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                                                    <span style={{ fontSize: '1.2rem' }}>📱</span>
-                                                    <div>
-                                                        <div style={{ fontWeight: 500, color: 'var(--text-primary)' }}>Online (GPay / PhonePe)</div>
-                                                        <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>Pay securely via UPI QR Code.</div>
-                                                    </div>
-                                                </div>
-
-                                                {paymentMethod === 'online' && (
-                                                    <div style={{ marginTop: '0.5rem', animation: 'slideDown 0.3s ease-out' }}>
-                                                        <div style={{ background: 'white', padding: '1rem', borderRadius: '8px', border: '1px dashed #ccc', textAlign: 'center' }}>
-                                                            <div style={{ width: '150px', height: '150px', background: '#f8f9fa', border: '4px solid black', margin: '0 auto', display: 'flex', alignItems: 'center', justifyContent: 'center', position: 'relative' }}>
-                                                                <div style={{ width: '80%', height: '80%', background: 'conic-gradient(black 25%, white 0 50%, black 0 75%, white 0)', backgroundSize: '15px 15px' }}></div>
-                                                                <div style={{ position: 'absolute', background: 'white', padding: '4px', fontWeight: 'bold' }}>UPI</div>
-                                                            </div>
-                                                            <p style={{ margin: '10px 0 0', fontSize: '0.85rem', color: '#666' }}>Scan this code using any UPI app</p>
-                                                            <p style={{ margin: '4px 0 0', fontWeight: 'bold', fontSize: '1.1rem', color: 'black' }}>To Pay: ₹{subtotal.toFixed(2)}</p>
-                                                        </div>
-                                                    </div>
-                                                )}
-                                            </div>
-                                        </label>
-                                    </div>
+                                <div className="cart-footer-meta">
+                                    <span className="cart-footer-items">{totalItems} item{totalItems !== 1 ? 's' : ''}</span>
+                                    <span className="cart-footer-delivery">⚡ FREE Delivery</span>
                                 </div>
                                 <div className="cart-summary-row">
-                                    <span>To Pay</span>
-                                    <span>₹{subtotal.toFixed(2)}</span>
+                                    <span>Subtotal</span>
+                                    <span style={{ fontWeight: 700 }}>₹{subtotal.toFixed(2)}</span>
                                 </div>
                                 <button className="btn-checkout" onClick={handleCheckout}>
-                                    <span>Place Order</span>
-                                    <span>➔</span>
+                                    <span>🛒 Proceed to Checkout</span>
+                                    <span className="btn-checkout-arrow">→</span>
                                 </button>
+                                <div style={{ textAlign: 'center', fontSize: '0.72rem', color: 'var(--text-secondary)', marginTop: '0.5rem' }}>
+                                    🔒 Secure checkout
+                                </div>
                             </div>
                         )}
                     </div>

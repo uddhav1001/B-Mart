@@ -16,7 +16,25 @@ router.get('/', async (req, res) => {
 // Create a new order (Checkout)
 router.post('/', async (req, res) => {
     try {
-        const { orderId, items, total, paymentMethod, phoneNumber, customerName, email } = req.body;
+        const { orderId, items, total, paymentMethod, phoneNumber, customerName, email, userId } = req.body;
+        const User = require('../models/User');
+
+        let targetEmail = email || 'guest@bmart.com';
+        let targetName = customerName || 'B-Mart Customer';
+
+        // If userId is provided, fetch the registered email to ensure accuracy
+        if (userId) {
+            try {
+                const user = await User.findById(userId);
+                if (user) {
+                    targetEmail = user.email;
+                    targetName = user.username;
+                    console.log(`Using registered email for invoice: ${targetEmail}`);
+                }
+            } catch (err) {
+                console.error("Error fetching registered user:", err);
+            }
+        }
 
         const newOrder = new Order({
             id: orderId || `ORD-${Math.floor(100000 + Math.random() * 900000)}`,
@@ -25,14 +43,40 @@ router.post('/', async (req, res) => {
             paymentMethod: paymentMethod || 'cod',
             status: 'Processing',
             phoneNumber: phoneNumber || '',
-            customerName: customerName || 'B-Mart Customer',
-            email: email || 'guest@bmart.com',
+            userId: userId || null,
+            customerName: targetName,
+            email: targetEmail,
             createdAt: new Date(),
         });
 
         await newOrder.save();
-
+        
+        // Respond immediately so user doesn't wait for PDF/Email generation
         res.status(201).json({ success: true, order: newOrder, message: "Order placed successfully." });
+
+        // Background Task: Generate PDF & Email
+        // Wrap in try-catch to prevent crashing server on background errors
+        (async () => {
+            try {
+                if (newOrder.email) {
+                    const { generateInvoicePDF } = require('../utils/pdfGenerator');
+                    const { sendInvoiceEmail } = require('../utils/mailer');
+                    
+                    console.log(`Generating PDF for Order: ${newOrder.id}...`);
+                    const pdfBuffer = await generateInvoicePDF(newOrder);
+                    
+                    console.log(`Sending email to ${newOrder.email}...`);
+                    const info = await sendInvoiceEmail(newOrder.email, pdfBuffer, newOrder.id);
+                    
+                    // Display preview link in terminal for easy testing without an inbox
+                    const nodemailer = require('nodemailer');
+                    console.log('PDF Email Preview URL: %s', nodemailer.getTestMessageUrl(info));
+                }
+            } catch (bgErr) {
+                console.error("Background Email Task Failed:", bgErr);
+            }
+        })();
+
     } catch (error) {
         console.error("Error creating order:", error);
         res.status(500).json({ success: false, message: 'Server error' });

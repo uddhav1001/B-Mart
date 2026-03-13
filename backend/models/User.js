@@ -19,6 +19,12 @@ const UserSchema = new mongoose.Schema({
     type: String,
     default: 'B-Mart Hub, Downtown',
   },
+  resetPasswordToken: {
+    type: String,
+  },
+  resetPasswordExpires: {
+    type: Date,
+  },
 }, { timestamps: true });
 
 module.exports = mongoose.model('User', UserSchema);

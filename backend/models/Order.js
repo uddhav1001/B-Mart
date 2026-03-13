@@ -35,6 +35,11 @@ const OrderSchema = new mongoose.Schema({
         required: true,
         index: true,
     },
+    userId: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'User',
+        required: false,
+    },
     createdAt: {
         type: Date,
         default: Date.now,

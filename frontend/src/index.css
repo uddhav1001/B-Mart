@@ -46,6 +46,8 @@ body {
   padding: 0;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+  overflow-x: hidden;
+  max-width: 100vw;
 }
 
 /* Base Container */
@@ -53,6 +55,8 @@ body {
   width: 100%;
   height: 100vh;
   display: flex;
+  overflow-x: hidden;
+  max-width: 100vw;
 }
 
 /* --- Split Screen Layout (kept for Auth pages) --- */
