@@ -436,6 +436,65 @@
 .upi-id-value { font-weight: 700; font-family: monospace; font-size: 1.05rem; }
 .btn-copy-upi { background: white; border: 1px solid #cbd5e1; border-radius: 4px; padding: 4px 8px; font-size: 0.72rem; cursor: pointer; }
 .btn-copy-upi:active { background: #e2e8f0; }
+
+.upi-verification-form {
+    margin-top: 1.5rem;
+    padding-top: 1.5rem;
+    border-top: 1px dashed #e2e8f0;
+    text-align: left;
+}
+
+.upi-v-field {
+    margin-bottom: 1.25rem;
+}
+
+.upi-v-field label {
+    display: block;
+    font-size: 0.85rem;
+    font-weight: 700;
+    color: #475569;
+    margin-bottom: 0.5rem;
+}
+
+.upi-v-field input[type="text"] {
+    width: 100%;
+    padding: 0.75rem 1rem;
+    border: 2px solid #e2e8f0;
+    border-radius: 10px;
+    font-size: 1rem;
+    font-weight: 600;
+    transition: all 0.2s;
+    box-sizing: border-box;
+}
+
+.upi-v-field input[type="text"]:focus {
+    outline: none;
+    border-color: #5f259f;
+    box-shadow: 0 0 0 4px rgba(95, 37, 159, 0.1);
+}
+
+.upi-v-field input[type="file"] {
+    display: block;
+    width: 100%;
+    padding: 0.5rem;
+    background: #f8fafc;
+    border: 2px dashed #e2e8f0;
+    border-radius: 10px;
+    font-size: 0.85rem;
+    box-sizing: border-box;
+}
+
+.upi-error {
+    margin-top: 1rem;
+    padding: 0.75rem 1rem;
+    background: #fef2f2;
+    border: 1px solid #fee2e2;
+    border-radius: 8px;
+    color: #b91c1c;
+    font-size: 0.85rem;
+    font-weight: 600;
+}
+
 .upi-apps-logos { display: flex; justify-content: center; gap: 1.4rem; flex-wrap: wrap; }
 .upi-app-logo { display: flex; flex-direction: column; align-items: center; gap: 0.4rem; }
 .upi-app-icon {

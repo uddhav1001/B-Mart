@@ -40,6 +40,20 @@ const OrderSchema = new mongoose.Schema({
         ref: 'User',
         required: false,
     },
+    transactionId: {
+        type: String,
+        unique: true,
+        sparse: true, // Allow multiple nulls for COD orders
+        index: true,
+    },
+    screenshotUrl: {
+        type: String,
+        default: '',
+    },
+    paymentVerified: {
+        type: Boolean,
+        default: false,
+    },
     createdAt: {
         type: Date,
         default: Date.now,

@@ -18,7 +18,7 @@ const transporter = nodemailer.createTransport({
 
 // Register Route
 router.post('/register', async (req, res) => {
-    const { username, email, password } = req.body;
+    let { username, email, password, name, phone, pincode, address } = req.body;
 
     try {
         let user = await User.findOne({ email });
@@ -26,13 +26,32 @@ router.post('/register', async (req, res) => {
             return res.status(400).json({ message: 'User already exists' });
         }
 
+        // Auto-generate username if not provided
+        if (!username && name) {
+            const baseUsername = name.toLowerCase().replace(/\s+/g, '');
+            const randomSuffix = Math.floor(100 + Math.random() * 900); // 3-digit random number
+            username = `${baseUsername}${randomSuffix}`;
+            
+            // Check if generated username exists (though suffix helps avoid this)
+            let existingUser = await User.findOne({ username });
+            while (existingUser) {
+                const newSuffix = Math.floor(1000 + Math.random() * 9000);
+                username = `${baseUsername}${newSuffix}`;
+                existingUser = await User.findOne({ username });
+            }
+        }
+
         const salt = await bcrypt.genSalt(10);
         const hashedPassword = await bcrypt.hash(password, salt);
 
         user = new User({
-            username,
+            username: username || `user_${Date.now()}`,
             email,
             password: hashedPassword,
+            name,
+            phone,
+            pincode,
+            address,
         });
 
         await user.save();
@@ -49,7 +68,7 @@ router.post('/register', async (req, res) => {
             { expiresIn: '5h' },
             (err, token) => {
                 if (err) throw err;
-                res.json({ token, user: { id: user.id, username: user.username, email: user.email, address: user.address } });
+                res.json({ token, user: { id: user.id, username: user.username, email: user.email, name: user.name, phone: user.phone, pincode: user.pincode, address: user.address } });
             }
         );
     } catch (err) {
@@ -85,7 +104,7 @@ router.post('/login', async (req, res) => {
             { expiresIn: '5h' },
             (err, token) => {
                 if (err) throw err;
-                res.json({ token, user: { id: user.id, username: user.username, email: user.email, address: user.address } });
+                res.json({ token, user: { id: user.id, username: user.username, email: user.email, name: user.name, phone: user.phone, pincode: user.pincode, address: user.address } });
             }
         );
     } catch (err) {
@@ -94,9 +113,9 @@ router.post('/login', async (req, res) => {
     }
 });
 
-// Update Address Route
-router.put('/address', async (req, res) => {
-    const { userId, address } = req.body;
+// Update Profile Route
+router.put('/profile', async (req, res) => {
+    const { userId, name, phone, address, pincode } = req.body;
 
     try {
         let user = await User.findById(userId);
@@ -104,10 +123,24 @@ router.put('/address', async (req, res) => {
             return res.status(404).json({ message: 'User not found' });
         }
 
-        user.address = address;
+        if (name) user.name = name;
+        if (phone) user.phone = phone;
+        if (address) user.address = address;
+        if (pincode) user.pincode = pincode;
+
         await user.save();
 
-        res.json({ user: { id: user.id, username: user.username, email: user.email, address: user.address } });
+        res.json({ 
+            user: { 
+                id: user.id, 
+                username: user.username, 
+                email: user.email, 
+                name: user.name, 
+                phone: user.phone, 
+                address: user.address, 
+                pincode: user.pincode 
+            } 
+        });
     } catch (err) {
         console.error(err.message);
         res.status(500).send('Server Error');

@@ -1506,17 +1506,26 @@ body {
 .dashboard-welcome-banner {
   background: linear-gradient(120deg, #0c831f 0%, #1aab30 60%, #f8cb46 100%);
   border-radius: 16px;
-  padding: 1.5rem 2rem;
+  padding: 2rem;
   margin-bottom: 2rem;
   display: flex;
   justify-content: space-between;
   align-items: center;
-  gap: 1rem;
+  gap: 1.5rem;
   color: white;
-  box-shadow: 0 4px 20px rgba(12, 131, 31, 0.25);
+  box-shadow: 0 4px 24px rgba(12, 131, 31, 0.2);
   flex-wrap: wrap;
   position: relative;
   overflow: hidden;
+}
+
+@media (max-width: 640px) {
+  .dashboard-welcome-banner {
+    padding: 1.5rem 1.25rem;
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+  }
 }
 .dashboard-welcome-banner::before {
   content: '';
@@ -2430,22 +2439,36 @@ body {
   background: white;
   border: 1.5px solid var(--panel-border);
   border-radius: 50%;
-  width: 30px;
-  height: 30px;
-  font-size: 1.3rem;
+  width: 36px; /* Slightly larger targets */
+  height: 36px;
+  font-size: 1.4rem;
   line-height: 1;
   display: flex;
   align-items: center;
   justify-content: center;
   cursor: pointer;
   flex-shrink: 0;
-  color: var(--text-secondary);
-  transition: all 0.2s;
+  color: var(--text-primary);
+  transition: all 0.2s ease-in-out;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+  z-index: 5;
 }
+
 .cat-slider-arrow:hover {
   background: var(--action-color);
   color: white;
   border-color: var(--action-color);
+  transform: scale(1.1);
+  box-shadow: 0 4px 12px rgba(12,131,31,0.2);
+}
+
+.cat-slider-arrow:active {
+  transform: scale(0.92);
+}
+
+/* Specific position adjustments if inside content area */
+.content-cat-slider .cat-slider-arrow {
+  margin: 0 -5px; /* Pull arrows in slightly */
 }
 
 /* Scrollable track */
@@ -2848,36 +2871,51 @@ body { overflow-x: hidden; }
 
   .dashboard-nav {
     padding: 0.5rem 0.75rem;
-    gap: 0.5rem;
-    flex-wrap: nowrap;
+    gap: 0.4rem;
+    flex-wrap: wrap; /* Allow wrapping for search bar */
   }
-  .nav-left-group { gap: 0.4rem; flex-shrink: 0; }
-  .nav-brand { font-size: 1.3rem; }
+  .nav-left-group { 
+    gap: 0.4rem; 
+    flex-shrink: 0;
+    max-width: 60%; /* Ensure brand and toggle don't take too much space */
+  }
+  .nav-brand { font-size: 1.2rem; }
+  .brand-icon { font-size: 1.1rem; }
 
   /* Hide delivery info completely on mobile */
   .nav-delivery-info { display: none; }
 
-  /* Compact search */
+  /* Search bar: full width on mobile to avoid being pushed off */
   .nav-search-container {
-    flex: 1;
-    min-width: 0;
+    flex: none;
+    width: 100%;
+    order: 10; /* Move to next row */
+    margin-top: 0.25rem;
+    padding: 0.4rem 0.75rem;
   }
-  .nav-search-input { font-size: 0.82rem; }
+  .nav-search-input { font-size: 0.85rem; }
 
   /* Right controls */
-  .nav-controls { gap: 0.4rem; }
+  .nav-controls { 
+    gap: 0.5rem; 
+    margin-left: auto; /* Push to right */
+  }
   .user-greeting-label,
   .user-greeting { display: none; }
   .user-info-col { display: none; }
   .avatar-chevron { display: none; }
+  .user-avatar { width: 32px; height: 32px; font-size: 0.9rem; }
 
   /* Cart button: icon + amount only */
   .cart-btn-text { display: none; }
   .btn-cart {
-    padding: 8px 10px;
-    border-radius: 10px;
-    min-width: unset;
+    padding: 6px 10px;
+    border-radius: 8px;
+    font-size: 0.85rem;
+    gap: 0.3rem;
   }
+  .cart-icon-wrapper { font-size: 1rem; }
+  .cart-badge { width: 14px; height: 14px; font-size: 0.55rem; top: -6px; right: -6px; }
 
   /* Profile dropdown: full width */
   .profile-dropdown {
@@ -3002,14 +3040,22 @@ body { overflow-x: hidden; }
 
   /* ---- CONTENT CATEGORY SLIDER ---- */
   .content-cat-slider {
-    padding: 0.4rem 0.5rem;
+    padding: 0.4rem 1.75rem; /* Increase side padding for arrows */
     margin-bottom: 1rem;
   }
-  .cat-slider-chip {
-    padding: 5px 10px;
-    font-size: 0.76rem;
+  .cat-slider-track {
+    gap: 8px;
   }
-  .cat-chip-icon { font-size: 0.85rem; }
+  .cat-slider-card {
+    min-width: 85px;
+    padding: 0.5rem;
+  }
+  .cat-card-icon-wrap {
+    width: 45px;
+    height: 45px;
+  }
+  .cat-card-label { font-size: 0.72rem; }
+  .cat-card-tag { font-size: 0.6rem; }
 
   /* ---- MISC ---- */
   .section-count { display: none; }

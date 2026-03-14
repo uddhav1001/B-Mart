@@ -1,4 +1,4 @@
-import { useState, useContext } from 'react';
+import { useState, useContext, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { CartContext } from '../context/CartContext';
 
@@ -13,6 +13,11 @@ interface OrderState {
     address: string;
 }
 
+interface MerchantConfig {
+    upiId: string;
+    qrCodeUrl: string;
+}
+
 type PaymentMethod = 'cod' | 'upi' | 'card' | 'wallet';
 
 export default function PaymentPage() {
@@ -22,13 +27,36 @@ export default function PaymentPage() {
 
     const [selectedMethod, setSelectedMethod] = useState<PaymentMethod>('cod');
     const [isProcessing, setIsProcessing] = useState(false);
+    const [merchantConfig, setMerchantConfig] = useState<MerchantConfig | null>(null);
     const { clearCart } = useContext(CartContext);
+
+    // Fetch Merchant Config on mount
+    useEffect(() => {
+        const fetchConfig = async () => {
+            try {
+                const res = await fetch('http://localhost:5000/api/payments/config');
+                const data = await res.json();
+                if (data.success) {
+                    setMerchantConfig(data.config);
+                }
+            } catch (err) {
+                console.error("Error fetching merchant config:", err);
+            }
+        };
+        fetchConfig();
+    }, []);
 
     // Card fields
     const [cardName, setCardName] = useState('');
     const [cardNumber, setCardNumber] = useState('');
     const [cardExpiry, setCardExpiry] = useState('');
     const [cardCvv, setCardCvv] = useState('');
+
+    // UPI Verification fields
+    const [transactionId, setTransactionId] = useState('');
+    const [screenshotFile, setScreenshotFile] = useState<File | null>(null);
+    const [verificationStatus, setVerificationStatus] = useState<'idle' | 'verifying' | 'success' | 'failed'>('idle');
+    const [errorMessage, setErrorMessage] = useState('');
 
     // Wallet selection
     const [wallet, setWallet] = useState('paytm');
@@ -49,6 +77,7 @@ export default function PaymentPage() {
 
     const handlePayNow = async () => {
         setIsProcessing(true);
+        setErrorMessage('');
         const orderId = `ORD-${Math.floor(100000 + Math.random() * 900000)}`;
 
         let userId = null;
@@ -62,29 +91,89 @@ export default function PaymentPage() {
             console.error("Error getting userId from localStorage", e);
         }
 
-        try {
-            await fetch('http://localhost:5000/api/orders', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    orderId,
-                    items: state.items,
-                    total: state.grandTotal,
-                    paymentMethod: selectedMethod,
-                    customerName: state.customerName,
-                    email: state.email,
-                    phoneNumber: null,
-                    userId, // Passing registered userId for accuracy
-                }),
-            });
-        } catch (e) {
-            console.error('Failed to save order', e);
+        // Special logic for UPI Verification
+        if (selectedMethod === 'upi') {
+            if (!transactionId || !screenshotFile) {
+                setErrorMessage('Transaction ID and Screenshot are required for UPI payment.');
+                setIsProcessing(false);
+                return;
+            }
+
+            setVerificationStatus('verifying');
+            try {
+                // 1. Create the Order first in status "Processing"
+                const orderRes = await fetch('http://localhost:5000/api/orders', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        orderId,
+                        items: state.items,
+                        total: state.grandTotal,
+                        paymentMethod: selectedMethod,
+                        customerName: state.customerName,
+                        email: state.email,
+                        phoneNumber: null,
+                        userId,
+                    }),
+                });
+
+                if (!orderRes.ok) throw new Error("Failed to create order");
+
+                // 2. Upload and Verify Screenshot
+                const formData = new FormData();
+                formData.append('orderId', orderId);
+                formData.append('transactionId', transactionId);
+                formData.append('amount', state.grandTotal.toString());
+                formData.append('screenshot', screenshotFile);
+
+                const verifyRes = await fetch('http://localhost:5000/api/payments/verify-upi', {
+                    method: 'POST',
+                    body: formData,
+                });
+
+                const verifyData = await verifyRes.json();
+
+                if (verifyData.success) {
+                    setVerificationStatus('success');
+                } else {
+                    setVerificationStatus('failed');
+                    setErrorMessage(verifyData.message || 'Verification failed. Our team will verify manually.');
+                    setIsProcessing(false);
+                    return;
+                }
+
+            } catch (e) {
+                setVerificationStatus('failed');
+                setErrorMessage('An error occurred during verification. Please try again or contact support.');
+                setIsProcessing(false);
+                return;
+            }
+        } else {
+            // Existing logic for COD and others
+            try {
+                await fetch('http://localhost:5000/api/orders', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        orderId,
+                        items: state.items,
+                        total: state.grandTotal,
+                        paymentMethod: selectedMethod,
+                        customerName: state.customerName,
+                        email: state.email,
+                        phoneNumber: null,
+                        userId,
+                    }),
+                });
+            } catch (e) {
+                console.error('Failed to save order', e);
+            }
         }
 
-        // Simulate payment processing
+        // Finalize order
         setTimeout(() => {
             setIsProcessing(false);
-            clearCart(); // Clear the cart for the next order
+            clearCart();
             navigate('/invoice', {
                 state: {
                     orderId,
@@ -100,7 +189,7 @@ export default function PaymentPage() {
                     paidAt: new Date().toISOString(),
                 }
             });
-        }, 1800);
+        }, 1200);
     };
 
     const methods: { id: PaymentMethod; label: string; icon: string; desc: string }[] = [
@@ -112,7 +201,6 @@ export default function PaymentPage() {
 
     return (
         <div className="payment-page">
-            {/* Header */}
             <header className="checkout-header">
                 <button className="checkout-back-btn" onClick={() => navigate(-1)}>← Back</button>
                 <div className="checkout-header-brand"><span>🛒</span> B-Mart</div>
@@ -127,11 +215,8 @@ export default function PaymentPage() {
 
             <main className="payment-main">
                 <div className="payment-grid">
-
-                    {/* LEFT — Payment Method Selector */}
                     <div className="payment-left">
                         <h2 className="payment-section-title">Choose Payment Method</h2>
-
                         <div className="payment-methods-list">
                             {methods.map(m => (
                                 <button
@@ -152,75 +237,51 @@ export default function PaymentPage() {
                             ))}
                         </div>
 
-                        {/* Dynamic panel for selected method */}
                         <div className="payment-detail-panel">
-
-                            {/* UPI Panel */}
                             {selectedMethod === 'upi' && (
                                 <div className="upi-panel">
                                     <p className="upi-instruction">Scan the QR Code using <strong>GPay, PhonePe, or any UPI app</strong></p>
                                     <div className="qr-wrapper">
-                                        {/* Realistic SVG QR-code pattern */}
-                                        <svg className="qr-svg" viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg">
-                                            <rect width="200" height="200" fill="white"/>
-                                            {/* Top-left finder */}
-                                            <rect x="10" y="10" width="50" height="50" rx="4" fill="#111"/>
-                                            <rect x="18" y="18" width="34" height="34" rx="2" fill="white"/>
-                                            <rect x="24" y="24" width="22" height="22" rx="1" fill="#111"/>
-                                            {/* Top-right finder */}
-                                            <rect x="140" y="10" width="50" height="50" rx="4" fill="#111"/>
-                                            <rect x="148" y="18" width="34" height="34" rx="2" fill="white"/>
-                                            <rect x="154" y="24" width="22" height="22" rx="1" fill="#111"/>
-                                            {/* Bottom-left finder */}
-                                            <rect x="10" y="140" width="50" height="50" rx="4" fill="#111"/>
-                                            <rect x="18" y="148" width="34" height="34" rx="2" fill="white"/>
-                                            <rect x="24" y="154" width="22" height="22" rx="1" fill="#111"/>
-                                            {/* Data modules pattern */}
-                                            <rect x="74" y="10" width="8" height="8" fill="#111"/><rect x="86" y="10" width="8" height="8" fill="#111"/>
-                                            <rect x="110" y="10" width="8" height="8" fill="#111"/><rect x="122" y="10" width="8" height="8" fill="#111"/>
-                                            <rect x="74" y="22" width="8" height="8" fill="#111"/><rect x="98" y="22" width="8" height="8" fill="#111"/>
-                                            <rect x="122" y="22" width="8" height="8" fill="#111"/>
-                                            <rect x="86" y="34" width="8" height="8" fill="#111"/><rect x="110" y="34" width="8" height="8" fill="#111"/>
-                                            <rect x="74" y="46" width="8" height="8" fill="#111"/><rect x="98" y="46" width="8" height="8" fill="#111"/>
-                                            <rect x="110" y="46" width="8" height="8" fill="#111"/><rect x="122" y="46" width="8" height="8" fill="#111"/>
-                                            <rect x="10" y="74" width="8" height="8" fill="#111"/><rect x="22" y="74" width="8" height="8" fill="#111"/>
-                                            <rect x="46" y="74" width="8" height="8" fill="#111"/><rect x="74" y="74" width="8" height="8" fill="#111"/>
-                                            <rect x="86" y="74" width="8" height="8" fill="#111"/><rect x="98" y="74" width="8" height="8" fill="#111"/>
-                                            <rect x="122" y="74" width="8" height="8" fill="#111"/><rect x="146" y="74" width="8" height="8" fill="#111"/>
-                                            <rect x="158" y="74" width="8" height="8" fill="#111"/><rect x="182" y="74" width="8" height="8" fill="#111"/>
-                                            <rect x="10" y="86" width="8" height="8" fill="#111"/><rect x="34" y="86" width="8" height="8" fill="#111"/>
-                                            <rect x="74" y="86" width="8" height="8" fill="#111"/><rect x="98" y="86" width="8" height="8" fill="#111"/>
-                                            <rect x="110" y="86" width="8" height="8" fill="#111"/><rect x="134" y="86" width="8" height="8" fill="#111"/>
-                                            <rect x="158" y="86" width="8" height="8" fill="#111"/><rect x="182" y="86" width="8" height="8" fill="#111"/>
-                                            <rect x="22" y="98" width="8" height="8" fill="#111"/><rect x="46" y="98" width="8" height="8" fill="#111"/>
-                                            <rect x="86" y="98" width="8" height="8" fill="#111"/><rect x="122" y="98" width="8" height="8" fill="#111"/>
-                                            <rect x="146" y="98" width="8" height="8" fill="#111"/><rect x="170" y="98" width="8" height="8" fill="#111"/>
-                                            <rect x="10" y="110" width="8" height="8" fill="#111"/><rect x="34" y="110" width="8" height="8" fill="#111"/>
-                                            <rect x="58" y="110" width="8" height="8" fill="#111"/><rect x="74" y="110" width="8" height="8" fill="#111"/>
-                                            <rect x="98" y="110" width="8" height="8" fill="#111"/><rect x="134" y="110" width="8" height="8" fill="#111"/>
-                                            <rect x="158" y="110" width="8" height="8" fill="#111"/><rect x="182" y="110" width="8" height="8" fill="#111"/>
-                                            <rect x="22" y="122" width="8" height="8" fill="#111"/><rect x="46" y="122" width="8" height="8" fill="#111"/>
-                                            <rect x="86" y="122" width="8" height="8" fill="#111"/><rect x="110" y="122" width="8" height="8" fill="#111"/>
-                                            <rect x="146" y="122" width="8" height="8" fill="#111"/><rect x="170" y="122" width="8" height="8" fill="#111"/>
-                                            <rect x="74" y="140" width="8" height="8" fill="#111"/><rect x="98" y="140" width="8" height="8" fill="#111"/>
-                                            <rect x="134" y="140" width="8" height="8" fill="#111"/><rect x="158" y="140" width="8" height="8" fill="#111"/>
-                                            <rect x="86" y="152" width="8" height="8" fill="#111"/><rect x="110" y="152" width="8" height="8" fill="#111"/>
-                                            <rect x="122" y="152" width="8" height="8" fill="#111"/><rect x="182" y="152" width="8" height="8" fill="#111"/>
-                                            <rect x="74" y="164" width="8" height="8" fill="#111"/><rect x="98" y="164" width="8" height="8" fill="#111"/>
-                                            <rect x="134" y="164" width="8" height="8" fill="#111"/><rect x="146" y="164" width="8" height="8" fill="#111"/>
-                                            <rect x="86" y="176" width="8" height="8" fill="#111"/><rect x="110" y="176" width="8" height="8" fill="#111"/>
-                                            <rect x="158" y="176" width="8" height="8" fill="#111"/><rect x="170" y="176" width="8" height="8" fill="#111"/>
-                                            {/* Center logo area */}
-                                            <rect x="82" y="82" width="36" height="36" rx="4" fill="white"/>
-                                            <text x="100" y="106" textAnchor="middle" fontSize="18" fontWeight="bold" fill="#5C2D91">UPI</text>
-                                        </svg>
+                                        {merchantConfig?.qrCodeUrl ? (
+                                            <img 
+                                                src={`http://localhost:5000${merchantConfig.qrCodeUrl}`} 
+                                                alt="Payment QR" 
+                                                className="qr-img" 
+                                                style={{ width: '170px', height: '170px', objectFit: 'contain' }}
+                                                onError={(e) => (e.currentTarget.src = 'https://api.qrserver.com/v1/create-qr-code/?size=170x170&data=bmart@upi')}
+                                            />
+                                        ) : (
+                                            <div className="qr-placeholder" style={{ width: '170px', height: '170px', display: 'flex', alignItems: 'center', justifySelf: 'center', background: '#f1f1f1', borderRadius: '8px' }}>Loading QR...</div>
+                                        )}
                                         <div className="qr-amount">₹{state.grandTotal.toFixed(2)}</div>
                                     </div>
                                     <div className="upi-id-box">
                                         <span className="upi-id-label">UPI ID:</span>
-                                        <span className="upi-id-value">bmart@upi</span>
-                                        <button className="btn-copy-upi" onClick={() => navigator.clipboard.writeText('bmart@upi')}>Copy</button>
+                                        <span className="upi-id-value">{merchantConfig?.upiId || 'bmart@upi'}</span>
+                                        <button className="btn-copy-upi" onClick={() => navigator.clipboard.writeText(merchantConfig?.upiId || 'bmart@upi')}>Copy</button>
                                     </div>
+                                    
+                                    <div className="upi-verification-form">
+                                        <div className="upi-v-field">
+                                            <label>Transaction ID / UTR</label>
+                                            <input 
+                                                type="text" 
+                                                placeholder="Enter 12-digit UTR number" 
+                                                value={transactionId} 
+                                                onChange={e => setTransactionId(e.target.value)} 
+                                            />
+                                        </div>
+                                        <div className="upi-v-field">
+                                            <label>Upload Payment Screenshot</label>
+                                            <input 
+                                                type="file" 
+                                                accept="image/*"
+                                                onChange={e => setScreenshotFile(e.target.files?.[0] || null)} 
+                                            />
+                                        </div>
+                                        {errorMessage && <div className="upi-error">{errorMessage}</div>}
+                                    </div>
+
                                     <div className="upi-apps-logos">
                                         <div className="upi-app-logo">
                                             <div className="upi-app-icon" style={{background: 'linear-gradient(135deg, #1a73e8, #4285f4)'}}>G</div>

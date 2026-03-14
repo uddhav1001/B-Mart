@@ -2,9 +2,12 @@ import { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 
 export default function Register() {
-    const [username, setUsername] = useState('');
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
+    const [name, setName] = useState('');
+    const [address, setAddress] = useState('');
+    const [phone, setPhone] = useState('');
+    const [pincode, setPincode] = useState('');
     const [error, setError] = useState('');
     const [loading, setLoading] = useState(false);
     const navigate = useNavigate();
@@ -18,7 +21,7 @@ export default function Register() {
             const response = await fetch('http://localhost:5000/api/auth/register', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ username, email, password }),
+                body: JSON.stringify({ email, password, name, address, phone, pincode }),
             });
 
             const data = await response.json();
@@ -76,20 +79,20 @@ export default function Register() {
 
                     <form onSubmit={handleRegister}>
                         <div className="form-group">
-                            <label className="form-label" htmlFor="username">Username</label>
+                            <label className="form-label" htmlFor="name">Full Name</label>
                             <input
-                                id="username"
+                                id="name"
                                 type="text"
                                 className="form-input"
-                                value={username}
-                                onChange={(e) => setUsername(e.target.value)}
+                                value={name}
+                                onChange={(e) => setName(e.target.value)}
                                 required
-                                placeholder="johndoe"
+                                placeholder="John Doe"
                             />
                         </div>
 
                         <div className="form-group">
-                            <label className="form-label" htmlFor="email">Email</label>
+                            <label className="form-label" htmlFor="email">Email Adress</label>
                             <input
                                 id="email"
                                 type="email"
@@ -99,6 +102,46 @@ export default function Register() {
                                 required
                                 placeholder="you@example.com"
                             />
+                        </div>
+
+                        <div className="form-group">
+                            <label className="form-label" htmlFor="address">Delivery Address</label>
+                            <input
+                                id="address"
+                                type="text"
+                                className="form-input"
+                                value={address}
+                                onChange={(e) => setAddress(e.target.value)}
+                                required
+                                placeholder="Area, Building, Flat No."
+                            />
+                        </div>
+
+                        <div className="form-group-row" style={{ display: 'flex', gap: '1rem' }}>
+                            <div className="form-group" style={{ flex: 1 }}>
+                                <label className="form-label" htmlFor="phone">Phone Number</label>
+                                <input
+                                    id="phone"
+                                    type="tel"
+                                    className="form-input"
+                                    value={phone}
+                                    onChange={(e) => setPhone(e.target.value)}
+                                    required
+                                    placeholder="9876543210"
+                                />
+                            </div>
+                            <div className="form-group" style={{ flex: 1 }}>
+                                <label className="form-label" htmlFor="pincode">Pincode</label>
+                                <input
+                                    id="pincode"
+                                    type="text"
+                                    className="form-input"
+                                    value={pincode}
+                                    onChange={(e) => setPincode(e.target.value)}
+                                    required
+                                    placeholder="400001"
+                                />
+                            </div>
                         </div>
 
                         <div className="form-group">

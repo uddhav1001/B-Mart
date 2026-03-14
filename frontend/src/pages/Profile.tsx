@@ -26,6 +26,7 @@ export default function Profile() {
     });
 
     const [isSaved, setIsSaved] = useState(false);
+    const [error, setError] = useState('');
 
     useEffect(() => {
         // Check authentication
@@ -44,8 +45,12 @@ export default function Profile() {
         if (savedUserStr) {
             try {
                 const parsedUser = JSON.parse(savedUserStr);
-                if (parsedUser.username) defaultProfile.name = parsedUser.username;
+                // Map new mandatory fields from the user object
+                if (parsedUser.name) defaultProfile.name = parsedUser.name;
                 if (parsedUser.email) defaultProfile.email = parsedUser.email;
+                if (parsedUser.phone) defaultProfile.phone = parsedUser.phone;
+                if (parsedUser.address) defaultProfile.address = parsedUser.address;
+                if (parsedUser.pincode) defaultProfile.pincode = parsedUser.pincode;
             } catch (e) {
                 console.error("Failed to parse user from localStorage");
             }
@@ -71,23 +76,46 @@ export default function Profile() {
         setIsSaved(false);
     };
 
-    const handleSave = (e: React.FormEvent) => {
+    const handleSave = async (e: React.FormEvent) => {
         e.preventDefault();
-        // Simulate API save by writing to localStorage
-        localStorage.setItem('userProfile', JSON.stringify(profile));
-
-        // Attempt to update the base 'user' name as well so it reflects in the dashboard
+        setError('');
+        
         const savedUserStr = localStorage.getItem('user');
-        if (savedUserStr) {
-            try {
-                const parsedUser = JSON.parse(savedUserStr);
-                parsedUser.username = profile.name;
-                localStorage.setItem('user', JSON.stringify(parsedUser));
-            } catch (e) { }
+        if (!savedUserStr) {
+            setError('User session not found. Please log in again.');
+            return;
         }
 
-        setIsSaved(true);
-        setTimeout(() => setIsSaved(false), 3000); // Hide banner after 3 seconds
+        try {
+            const parsedUser = JSON.parse(savedUserStr);
+            const response = await fetch('http://localhost:5000/api/auth/profile', {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    userId: parsedUser.id,
+                    name: profile.name,
+                    phone: profile.phone,
+                    address: profile.address,
+                    pincode: profile.pincode
+                }),
+            });
+
+            const data = await response.json();
+
+            if (!response.ok) {
+                throw new Error(data.message || 'Failed to update profile');
+            }
+
+            // Update local storage
+            localStorage.setItem('user', JSON.stringify(data.user));
+            // Keep userProfile for any extra fields like dob/gender that might not be in the core user model yet
+            localStorage.setItem('userProfile', JSON.stringify(profile));
+
+            setIsSaved(true);
+            setTimeout(() => setIsSaved(false), 3000);
+        } catch (err: any) {
+            setError(err.message);
+        }
     };
 
     return (
@@ -111,6 +139,12 @@ export default function Profile() {
                         <h2>My Profile</h2>
                         <p>Manage your personal information and preferences.</p>
                     </div>
+
+                    {error && (
+                        <div className="error-message" style={{ background: '#fee2e2', color: '#dc2626', padding: '1rem', borderRadius: '8px', marginBottom: '1.5rem', border: '1px solid #fecaca' }}>
+                            {error}
+                        </div>
+                    )}
 
                     {isSaved && (
                         <div className="save-banner" style={{ background: 'var(--action-light)', color: 'var(--action-color)', padding: '1rem', borderRadius: '8px', marginBottom: '1.5rem', fontWeight: 'bold' }}>

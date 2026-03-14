@@ -15,9 +15,21 @@ const UserSchema = new mongoose.Schema({
     type: String,
     required: true,
   },
+  name: {
+    type: String,
+    required: true,
+  },
+  phone: {
+    type: String,
+    required: true,
+  },
+  pincode: {
+    type: String,
+    required: true,
+  },
   address: {
     type: String,
-    default: 'B-Mart Hub, Downtown',
+    required: true,
   },
   resetPasswordToken: {
     type: String,

@@ -360,7 +360,7 @@ export default function Dashboard() {
                                                 className="category-icon"
                                                 style={{ background: cat.bg }}
                                             >
-                                                <img src={cat.image} alt={cat.name} className="cat-icon-img" />
+                                                <img src={cat.image} alt={cat.name} className="cat-icon-img" loading="lazy" />
                                             </div>
                                             {!isSidebarCollapsed && (
                                                 <div className="category-name-col">
@@ -446,7 +446,7 @@ export default function Dashboard() {
                                     style={{ '--cat-color': cat.color, '--cat-bg': cat.bg } as React.CSSProperties}
                                 >
                                     <div className="cat-card-icon-wrap">
-                                        <img src={cat.image} alt={cat.name} className="cat-card-img" />
+                                        <img src={cat.image} alt={cat.name} className="cat-card-img" loading="lazy" />
                                     </div>
                                     <span className="cat-card-label">{cat.name}</span>
                                     <span className="cat-card-tag">{cat.tag}</span>
@@ -479,7 +479,7 @@ export default function Dashboard() {
                                         >
                                             <div className="cat-header-left-group">
                                                 <div className="cat-header-icon-pill" style={{ background: category.bg }}>
-                                                    <img src={category.image} alt={category.name} className="cat-header-img" />
+                                                    <img src={category.image} alt={category.name} className="cat-header-img" loading="lazy" />
                                                 </div>
                                                 <div>
                                                     <h2 className="catalog-title">{category.name}</h2>
@@ -496,7 +496,7 @@ export default function Dashboard() {
                                                 <div key={product.id} className="product-card">
                                                     <div className="delivery-badge">⏱️ {product.delivery}</div>
                                                     <div className="product-image-container" onClick={() => setSelectedProduct(product)} style={{ cursor: 'pointer' }}>
-                                                        <img src={product.image} alt={product.name} className="product-image" />
+                                                        <img src={product.image} alt={product.name} className="product-image" loading="lazy" />
                                                     </div>
                                                     <div className="product-info">
                                                         <div className="product-name" title={product.name} onClick={() => setSelectedProduct(product)} style={{ cursor: 'pointer' }}>{product.name}</div>
@@ -541,7 +541,7 @@ export default function Dashboard() {
                                     >
                                         <div className="cat-header-left-group">
                                             <div className="cat-header-icon-pill" style={{ background: category.bg }}>
-                                                <img src={category.image} alt={category.name} className="cat-header-img" />
+                                                <img src={category.image} alt={category.name} className="cat-header-img" loading="lazy" />
                                             </div>
                                             <div>
                                                 <h2 className="catalog-title">{category.name}</h2>
@@ -565,7 +565,7 @@ export default function Dashboard() {
                                                 <div key={product.id} className="product-card">
                                                     <div className="delivery-badge">⏱️ {product.delivery}</div>
                                                     <div className="product-image-container" onClick={() => setSelectedProduct(product)} style={{ cursor: 'pointer' }}>
-                                                        <img src={product.image} alt={product.name} className="product-image" />
+                                                        <img src={product.image} alt={product.name} className="product-image" loading="lazy" />
                                                     </div>
                                                     <div className="product-info">
                                                         <div className="product-name" title={product.name} onClick={() => setSelectedProduct(product)} style={{ cursor: 'pointer' }}>{product.name}</div>
